@@ -95,6 +95,7 @@ If your USB adapter appears on another port, you can still run manually:
 - Check power and bus wiring
 - Verify serial adapter path and permissions
 - Ensure baud rate is correct (app probes common rates)
+- Sometimes running the DynamixelWizard, using the servos, then closing the Wizard makes the servos cooperate.
 
 ### No camera / hand detection
 
