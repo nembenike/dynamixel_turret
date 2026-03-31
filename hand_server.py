@@ -68,8 +68,9 @@ FINGERTIP_IDS  = [THUMB_TIP, INDEX_TIP, MIDDLE_TIP, RING_TIP, PINKY_TIP]
 MCP_IDS        = [1, 5, 9, 13, 17]   # knuckle bases – used for palm centre
 
 # Struct layout must match HandPacket __attribute__((packed)) in turret.c
-# "=iiifi5i5if"  (= → native byte order / no alignment padding)
-STRUCT_FMT  = "=iiifi5i5if"
+# "=iiifi5i5ifQ"  (= → native byte order / no alignment padding)
+# Q = uint64_t for timestamp_us (microseconds since epoch)
+STRUCT_FMT  = "=iiifi5i5ifQ"
 STRUCT_SIZE = struct.calcsize(STRUCT_FMT)
 
 # ── Socket setup ─────────────────────────────────────────────────────
@@ -163,11 +164,12 @@ else:
 # ── Helpers ──────────────────────────────────────────────────────────
 def pack_idle():
     """Return a 'no hand' packet."""
+    timestamp_us = int(time.monotonic() * 1e6)
     return struct.pack(STRUCT_FMT,
                        0, 0, 0, 0.0, 0,
                        0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0,
-                       0.0)
+                       0.0, timestamp_us)
 
 def pack_hand(lm, w, h, conf=1.0):
     """
@@ -197,11 +199,14 @@ def pack_hand(lm, w, h, conf=1.0):
     mcy = int(lm[9].y * h)
     palm_radius = math.hypot(px - mcx, py - mcy)
 
+    # Timestamp in microseconds for latency measurement
+    timestamp_us = int(time.monotonic() * 1e6)
+
     return struct.pack(STRUCT_FMT,
                        1, px, py, conf, 5,
                        fx[0], fx[1], fx[2], fx[3], fx[4],
                        fy[0], fy[1], fy[2], fy[3], fy[4],
-                       palm_radius)
+                       palm_radius, timestamp_us)
 
 def send_packet(data: bytes):
     """Send length-prefixed packet; raise on broken pipe."""

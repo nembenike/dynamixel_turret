@@ -98,6 +98,7 @@ extern "C" {
  *       int32_t  finger_x[5];
  *       int32_t  finger_y[5];
  *       float    palm_radius;
+ *       uint64_t timestamp_us;    // microseconds for latency measurement
  *   };
  * Each packet is preceded by a uint32_t length field (= sizeof(HandPacket)).
  */
@@ -110,6 +111,7 @@ typedef struct __attribute__((packed)) {
     int32_t  finger_x[5];
     int32_t  finger_y[5];
     float    palm_radius;
+    uint64_t timestamp_us;
 } HandPacket;
 
 /* ── Shared state ──────────────────────────────────────────────────── */
@@ -124,9 +126,13 @@ typedef struct {
     int     finger_x[MAX_FINGERS_TRACKED];
     int     finger_y[MAX_FINGERS_TRACKED];
     float   palm_radius;
+    double  latency_ms;          // latency in milliseconds for last packet
+    double  latency_min_ms;      // minimum latency seen
+    double  latency_max_ms;      // maximum latency seen
+    double  latency_avg_ms;      // running average latency
 } HandState;
 
-static HandState hand = { 320, 240, 0, 0.0f, 0.0f, 0, {0}, {0}, 0.0f };
+static HandState hand = { 320, 240, 0, 0.0f, 0.0f, 0, {0}, {0}, 0.0f, 0.0, 1e9, 0.0, 0.0 };
 static pthread_mutex_t hand_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* Camera frame pushed by Python server (640×480 RGB) */
@@ -346,6 +352,11 @@ static void *hand_tracking_thread(void *arg)
                 HandPacket pkt;
                 if (recv_all(sock, &pkt, sizeof(HandPacket)) < 0) break;
 
+                /* Calculate latency in milliseconds */
+                double now_us = monotonic_seconds() * 1e6;
+                double latency_ms = (now_us - (double)pkt.timestamp_us) / 1000.0;
+                if (latency_ms < 0.0) latency_ms = 0.0;  /* Handle clock skew */
+
                 if (pkt.detected) dps_count++;
                 double now = monotonic_seconds();
                 if (now - dps_t0 >= 1.0) {
@@ -361,6 +372,22 @@ static void *hand_tracking_thread(void *arg)
                 hand.confidence = pkt.confidence;
                 hand.palm_radius = pkt.palm_radius;
                 hand.detections_per_sec = dps_val;
+                hand.latency_ms = latency_ms;
+                
+                /* Update latency statistics */
+                if (latency_ms < hand.latency_min_ms) {
+                    hand.latency_min_ms = latency_ms;
+                }
+                if (latency_ms > hand.latency_max_ms) {
+                    hand.latency_max_ms = latency_ms;
+                }
+                /* Running average: exponential moving average */
+                if (hand.latency_avg_ms == 0.0) {
+                    hand.latency_avg_ms = latency_ms;
+                } else {
+                    hand.latency_avg_ms = 0.9 * hand.latency_avg_ms + 0.1 * latency_ms;
+                }
+                
                 int fc = pkt.finger_count;
                 if (fc < 0) fc = 0;
                 if (fc > MAX_FINGERS_TRACKED) fc = MAX_FINGERS_TRACKED;
@@ -794,6 +821,11 @@ int main(void)
                  340, 12, 14, (Color){120, 160, 200, 255});
         DrawText(TextFormat("DET/s: %.1f", hs.detections_per_sec), 705, 28, 11,
                  hs.detections_per_sec > 0.1f ? (Color){120,255,120,255} : (Color){170,190,220,255});
+        DrawText(TextFormat("LAT: %.1f ms (min:%.1f max:%.1f avg:%.1f)", 
+                 hs.latency_ms, hs.latency_min_ms, hs.latency_max_ms, hs.latency_avg_ms),
+                 705, 40, 11,
+                 hs.latency_ms < 50.0 ? (Color){120,255,120,255} : 
+                 hs.latency_ms < 100.0 ? (Color){255,255,120,255} : (Color){255,120,120,255});
         DrawText(TextFormat("CAM:%s", camera_online ? "LIVE" : "OFF"), 840, 12, 14,
                  camera_online ? (Color){100,255,100,255} : (Color){255,120,120,255});
         DrawText(TextFormat("CAL:%s", calibration_done ? "OK" : "NEEDED"), 910, 28, 11,
