@@ -1,4 +1,4 @@
-# Dynamix Turret
+# Dynamixel Turret
 
 Linux-focused pan/tilt turret controller for Dynamixel AX-12A servos with:
 
@@ -133,4 +133,4 @@ See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for diagnosis steps.
 
 ## License and release notes
 
-No explicit license file is currently present in this repository. Add one before public redistribution.
+[LICENSE](LICENSE)
