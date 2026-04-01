@@ -162,16 +162,15 @@ else:
     print("[HAND_SERVER] Using MediaPipe tasks API", flush=True)
 
 # ── Helpers ──────────────────────────────────────────────────────────
-def pack_idle():
+def pack_idle(frame_timestamp_us: int):
     """Return a 'no hand' packet."""
-    timestamp_us = int(time.monotonic() * 1e6)
     return struct.pack(STRUCT_FMT,
                        0, 0, 0, 0.0, 0,
                        0, 0, 0, 0, 0,
                        0, 0, 0, 0, 0,
-                       0.0, timestamp_us)
+                       0.0, int(frame_timestamp_us))
 
-def pack_hand(lm, w, h, conf=1.0):
+def pack_hand(lm, w, h, conf=1.0, frame_timestamp_us=0):
     """
     Build HandPacket from a MediaPipe NormalizedLandmarkList.
     w, h are the actual frame pixel dimensions.
@@ -199,14 +198,16 @@ def pack_hand(lm, w, h, conf=1.0):
     mcy = int(lm[9].y * h)
     palm_radius = math.hypot(px - mcx, py - mcy)
 
-    # Timestamp in microseconds for latency measurement
-    timestamp_us = int(time.monotonic() * 1e6)
+    # Timestamp in microseconds for latency measurement (capture time).
+    # This includes capture + MediaPipe + socket + consumer processing delay.
+    if frame_timestamp_us <= 0:
+        frame_timestamp_us = int(time.monotonic() * 1e6)
 
     return struct.pack(STRUCT_FMT,
                        1, px, py, conf, 5,
                        fx[0], fx[1], fx[2], fx[3], fx[4],
                        fy[0], fy[1], fy[2], fy[3], fy[4],
-                       palm_radius, timestamp_us)
+                       palm_radius, int(frame_timestamp_us))
 
 def send_packet(data: bytes):
     """Send length-prefixed packet; raise on broken pipe."""
@@ -222,6 +223,7 @@ frame_idx = 0
 try:
     while True:
         ok, bgr = cap.read()
+        frame_timestamp_us = int(time.monotonic() * 1e6)
         if not ok:
             drop_count += 1
             if drop_count > 60:
@@ -246,21 +248,21 @@ try:
                 conf = 1.0
                 if result.multi_handedness:
                     conf = float(result.multi_handedness[0].classification[0].score)
-                pkt = pack_hand(lm_list, FRAME_W, FRAME_H, conf)
+                pkt = pack_hand(lm_list, FRAME_W, FRAME_H, conf, frame_timestamp_us)
             else:
-                pkt = pack_idle()
+                pkt = pack_idle(frame_timestamp_us)
         else:
             mp_img = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-            ts_ms = int(time.monotonic() * 1000.0)
+            ts_ms = int(frame_timestamp_us / 1000)
             result = hand_landmarker.detect_for_video(mp_img, ts_ms)
             if result.hand_landmarks:
                 lm_list = result.hand_landmarks[0]
                 conf = 1.0
                 if result.handedness and result.handedness[0]:
                     conf = float(result.handedness[0][0].score)
-                pkt = pack_hand(lm_list, FRAME_W, FRAME_H, conf)
+                pkt = pack_hand(lm_list, FRAME_W, FRAME_H, conf, frame_timestamp_us)
             else:
-                pkt = pack_idle()
+                pkt = pack_idle(frame_timestamp_us)
 
         send_packet(pkt)
         frame_idx += 1

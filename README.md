@@ -1,123 +1,135 @@
 # Dynamix Turret
 
-Pan/tilt turret controller for **AX-12A Dynamixel servos** with:
-- Native C/C++ control loop + GUI (`raylib`)
-- Live hand tracking via Python + MediaPipe (`hand_server.py`)
-- Real-time telemetry (position/speed/load/voltage/temp)
+Linux-focused pan/tilt turret controller for Dynamixel AX-12A servos with:
 
-This project is currently Linux-focused.
+- High-rate native control loop and dashboard UI in C/C++ ([turret.c](turret.c))
+- Hand landmark tracking in Python using OpenCV + MediaPipe ([hand_server.py](hand_server.py))
+- Real-time telemetry, camera preview overlay, and latency measurement
 
-## Hardware
+This repository contains both runtime code and developer documentation.
 
-- 2× Dynamixel AX-12A servos
-- USB2Dynamixel/U2D2/compatible interface
-- Servos on a shared Dynamixel bus
-- Camera supported by OpenCV
+## Documentation map
 
-Default servo IDs in the app:
-- `PAN = 3`
-- `TILT = 4`
+- Project/developer intro: [README.md](README.md)
+- Development workflow: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+- Installation and dependencies: [docs/INSTALLATION.md](docs/INSTALLATION.md)
+- End-user operation and UI behavior: [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- Internal architecture and threading model: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Socket wire protocol reference: [docs/PROTOCOL.md](docs/PROTOCOL.md)
+- Troubleshooting cookbook: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
 
-If those IDs are not found, the app attempts simple auto-discovery.
+## What this project does
 
-## Software Requirements
+At runtime, the system controls two servos (pan + tilt) and renders a full telemetry UI.
 
-### System libraries (Ubuntu/Debian example)
+- Supports direct aiming with mouse and keyboard
+- Supports optional hand-tracking mode with 4-point camera-to-servo calibration
+- Streams camera frames into the C UI for overlay debugging
+- Displays detected hand, confidence, detection rate, and latency metrics
 
-Install build tools and C/C++ dependencies:
+## Repository layout
 
-- `g++`, `make`
-- `raylib`
-- `opencv` (core/videoio/imgproc headers + libs)
-- Dynamixel SDK C library (`libdxl_x64_c`)
+- Main controller process: [turret.c](turret.c)
+- Hand-tracking process: [hand_server.py](hand_server.py)
+- Build/run helper targets: [Makefile](Makefile)
+- Python runtime dependencies: [requirements.txt](requirements.txt)
+- Developer docs: [docs/](docs/)
 
-### Python requirements
+## Hardware requirements
 
-Use Python 3.10+ and install:
+- 2x Dynamixel AX-12A servos on a shared bus
+- USB Dynamixel adapter (U2D2 / USB2Dynamixel or compatible)
+- Stable servo power supply appropriate for load
+- Linux machine with a camera accessible via OpenCV
 
-```bash
-python3 -m pip install -r requirements.txt
-```
+Default IDs expected by the controller:
 
-## Build
+- PAN: `3`
+- TILT: `4`
 
-```bash
-make
-```
+If these IDs are not detected, the program attempts automatic discovery.
 
-Binary output: `./turret`
+## Software stack
 
-## Run
+- C/C++ application compiled as GNU++20
+- `raylib` for UI rendering
+- Dynamixel SDK C library (`libdxl_x64_c`) for protocol 1.0 serial communication
+- OpenCV C/C++ libraries linked by the main binary
+- Python 3 + `mediapipe` + `opencv-python` for hand tracking
 
-```bash
-make run
-```
+Dependency details and distro-specific install notes are in [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
-The app tries common serial ports automatically (`/dev/ttyACM0`, `/dev/ttyUSB0`, ...).
+## Quick start
 
-If your USB adapter appears on another port, you can still run manually:
+1. Install system packages and Python dependencies (see [docs/INSTALLATION.md](docs/INSTALLATION.md)).
+2. Build:
+  - `make`
+3. Run:
+  - `make run`
+4. In the UI:
+  - Move with mouse or arrow keys
+  - Press `H` to enable hand mode
+  - Complete 4-step calibration with `C`
 
-```bash
-./turret
-```
+## Runtime behavior summary
 
-## Controls
+The controller probes likely serial ports and baud rates to locate servos.
 
-- **Mouse drag** in aim pad: set target pan/tilt
-- **Arrow keys**: nudge target
-- **Space**: center turret
-- **T**: torque on/off
-- **H**: toggle hand mode
-- **C** (during calibration): capture calibration point
-- **Enter** (during calibration): skip calibration
+- Port candidates: `/dev/ttyACM0`, `/dev/ttyUSB0`, `/dev/ttyACM1`, `/dev/ttyUSB1`
+- Baud candidates: `1000000`, `57600`, `115200`, `2000000`
 
-## Hand Mode Notes
+When hand mode is enabled:
 
-- `turret` launches `hand_server.py` automatically
-- Hand tracking data is streamed over a Unix socket (`/tmp/hand_track.sock`)
-- Camera frames are also streamed for in-app overlay
-- On some MediaPipe builds, a `.task` model may be downloaded automatically to:
-  - `~/.cache/dynamix_turret/hand_landmarker.task`
+- The C process starts [hand_server.py](hand_server.py)
+- The Python process opens `/tmp/hand_track.sock`
+- Hand metadata and optional RGB frames are sent as length-prefixed packets
 
-## Typical First-Time Setup
+Protocol details are documented in [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-1. Wire servos and power safely.
-2. Confirm your user can access serial devices (`dialout` group, udev rules, or temporary chmod).
-3. Install Python dependencies (`make install-python-deps`).
-4. Build (`make`).
-5. Run (`make run`).
-6. Press **H** and complete 4-step hand calibration with **C**.
+## Keyboard and mouse controls
 
-## Troubleshooting
+- Left mouse drag in aim pad: set pan/tilt goal
+- Arrow keys: nudge goal
+- `Space`: center turret
+- `T`: toggle servo torque
+- `H`: toggle hand mode
+- `C`: capture calibration point (during wizard)
+- `Enter`: skip calibration wizard
 
-### No servo response
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for full interaction flow.
 
-- Check power and bus wiring
-- Verify serial adapter path and permissions
-- Ensure baud rate is correct (app probes common rates)
-- Sometimes running the DynamixelWizard, using the servos, then closing the Wizard makes the servos cooperate.
+## Safety notes
 
-### No camera / hand detection
+- Keep clear of moving parts during calibration and testing.
+- Confirm power supply and ground integrity before enabling torque.
+- Start with low mechanical load and free movement range.
+- Verify servo direction/mounting before unattended operation.
 
-- Confirm camera works with OpenCV
-- Verify `mediapipe` and `opencv-python` are installed
-- Run `python3 hand_server.py` directly to inspect Python-side errors
+## Build and run targets
 
-### Build fails with missing libraries
+The [Makefile](Makefile) provides:
 
-Install missing dev packages for `raylib`, OpenCV, and Dynamixel SDK, then rebuild.
+- `make` / `make all` - build `turret`
+- `make run` - best-effort serial permission change + launch
+- `make install-python-deps` - install Python packages
+- `make clean` - remove generated artifacts
+- `make help` - print target list
 
-## Project Layout
+## Environment variables
 
-- `turret.c` – main controller + GUI + serial + socket client
-- `hand_server.py` – MediaPipe camera tracker + socket server
-- `Makefile` – build/run helper targets
-- `requirements.txt` – Python dependencies
+Consumed by [hand_server.py](hand_server.py):
 
-## Publishing Checklist
+- `HAND_FRAME_SEND_EVERY`: send every Nth frame (`1` = all frames)
+- `HAND_LANDMARKER_MODEL_PATH`: override path for downloaded `.task` model
 
-Before pushing:
+## Common failure modes
 
-- Ensure local artifacts are removed: `make clean`
-- Confirm `.gitignore` excludes virtual envs and cache files
-- Optionally add a license file and release notes
+- No servo response: permissions, power, wrong port, wrong baud, bus wiring
+- No camera frame: inaccessible camera device or OpenCV backend mismatch
+- No landmarks: missing/incompatible MediaPipe install or model download issue
+
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for diagnosis steps.
+
+## License and release notes
+
+No explicit license file is currently present in this repository. Add one before public redistribution.

@@ -821,7 +821,7 @@ int main(void)
                  340, 12, 14, (Color){120, 160, 200, 255});
         DrawText(TextFormat("DET/s: %.1f", hs.detections_per_sec), 705, 28, 11,
                  hs.detections_per_sec > 0.1f ? (Color){120,255,120,255} : (Color){170,190,220,255});
-        DrawText(TextFormat("LAT: %.1f ms (min:%.1f max:%.1f avg:%.1f)", 
+        DrawText(TextFormat("LAT: %.2f ms (min:%.2f max:%.2f avg:%.2f)", 
                  hs.latency_ms, hs.latency_min_ms, hs.latency_max_ms, hs.latency_avg_ms),
                  705, 40, 11,
                  hs.latency_ms < 50.0 ? (Color){120,255,120,255} : 
