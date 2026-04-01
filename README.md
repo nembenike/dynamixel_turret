@@ -125,6 +125,7 @@ Consumed by [hand_server.py](hand_server.py):
 ## Common failure modes
 
 - No servo response: permissions, power, wrong port, wrong baud, bus wiring
+- Sometimes a quick scan/test in Dynamixel Wizard 2, then closing Wizard 2, helps the app detect servos again
 - No camera frame: inaccessible camera device or OpenCV backend mismatch
 - No landmarks: missing/incompatible MediaPipe install or model download issue
 

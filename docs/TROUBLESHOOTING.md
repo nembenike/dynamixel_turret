@@ -43,6 +43,7 @@ Actions:
 3. Check user permissions for serial node.
 4. Confirm expected baud/ID configuration.
 5. Disconnect other software that may hold the serial port.
+6. If detection still fails, open Dynamixel Wizard 2, scan/test the servos once, close Wizard 2, then start this app again (this can recover communication state on some adapters/firmware).
 
 ### One axis missing
 
